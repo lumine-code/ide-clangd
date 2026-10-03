@@ -97,44 +97,91 @@ describe("ide-clangd adapter", () => {
     ).toBeNull();
   });
 
-  it("installs the verified archive with its complete builtin-header directory", async () => {
+  it("selects only the official x64 archives", () => {
     const server = require("../lib/server");
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "ide-clangd-install-"));
-    try {
-      const binary = path.join(
-        root,
-        "clangd_23.1.0",
-        "bin",
-        process.platform === "win32" ? "clangd.exe" : "clangd",
+    for (const [platform, system] of [
+      ["win32", "windows"],
+      ["linux", "linux"],
+      ["darwin", "mac"],
+    ]) {
+      expect(server.assetFor({ platform, arch: "x64", version: "23.1.0" })).toBe(
+        `clangd-${system}-23.1.0.zip`,
       );
-      const header = path.join(root, "clangd_23.1.0", "lib", "clang", "23", "include", "stddef.h");
-      const asset = {
-        name: server.assetFor({ platform: process.platform, arch: "x64", version: "23.1.0" }),
-        url: "https://example.test/clangd.zip",
-        digest: "sha256:abc",
-      };
-      const api = {
-        setServerInstallationStatus: jasmine.createSpy("status"),
-        latestGithubRelease: async () => ({ version: "23.1.0", assets: [asset] }),
-        downloadFile: jasmine.createSpy("download").and.callFake(async () => {
-          fs.mkdirSync(path.dirname(binary), { recursive: true });
-          fs.writeFileSync(binary, "binary");
-          fs.mkdirSync(path.dirname(header), { recursive: true });
-          fs.writeFileSync(header, "header");
-        }),
-        makeFileExecutable: jasmine.createSpy("executable").and.resolveTo(),
-      };
-      const result = await server.installServer({ storagePath: root, api });
-      expect(result.binary).toBe(path.relative(root, binary));
-      expect(fs.existsSync(header)).toBe(true);
-      expect(api.downloadFile).toHaveBeenCalledWith(asset.url, root, {
-        type: "zip",
-        digest: asset.digest,
-      });
-    } finally {
-      if (root.startsWith(path.join(os.tmpdir(), "ide-clangd-install-")))
-        fs.rmSync(root, { recursive: true, force: true });
+      expect(server.assetFor({ platform, arch: "arm64", version: "23.1.0" })).toBeNull();
     }
+    expect(server.assetFor({ platform: "freebsd", arch: "x64", version: "23.1.0" })).toBeNull();
+  });
+
+  for (const platform of ["win32", "linux", "darwin"]) {
+    it(`installs the verified ${platform}/x64 archive with its builtin-header directory`, async () => {
+      const server = require("../lib/server");
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "ide-clangd-install-"));
+      try {
+        const binary = path.join(
+          root,
+          "clangd_23.1.0",
+          "bin",
+          platform === "win32" ? "clangd.exe" : "clangd",
+        );
+        const header = path.join(
+          root,
+          "clangd_23.1.0",
+          "lib",
+          "clang",
+          "23",
+          "include",
+          "stddef.h",
+        );
+        const asset = {
+          name: server.assetFor({ platform, arch: "x64", version: "23.1.0" }),
+          url: "https://example.test/clangd.zip",
+          digest: "sha256:abc",
+        };
+        const api = {
+          setServerInstallationStatus: jasmine.createSpy("status"),
+          latestGithubRelease: async () => ({ version: "23.1.0", assets: [asset] }),
+          downloadFile: jasmine.createSpy("download").and.callFake(async () => {
+            fs.mkdirSync(path.dirname(binary), { recursive: true });
+            fs.writeFileSync(binary, "binary");
+            fs.mkdirSync(path.dirname(header), { recursive: true });
+            fs.writeFileSync(header, "header");
+          }),
+          makeFileExecutable: jasmine.createSpy("executable").and.resolveTo(),
+        };
+        const result = await server.installServer({
+          storagePath: root,
+          api,
+          platform,
+          arch: "x64",
+        });
+        expect(result.binary).toBe(path.relative(root, binary));
+        expect(fs.existsSync(header)).toBe(true);
+        expect(api.downloadFile).toHaveBeenCalledWith(asset.url, root, {
+          type: "zip",
+          digest: asset.digest,
+        });
+        expect(api.makeFileExecutable).toHaveBeenCalledWith(binary);
+      } finally {
+        if (root.startsWith(path.join(os.tmpdir(), "ide-clangd-install-")))
+          fs.rmSync(root, { recursive: true, force: true });
+      }
+    });
+  }
+
+  it("refuses an unsupported architecture before downloading", async () => {
+    const server = require("../lib/server");
+    const api = {
+      setServerInstallationStatus() {},
+      latestGithubRelease: async () => ({
+        version: "23.1.0",
+        assets: [{ name: "clangd-mac-23.1.0.zip", digest: "sha256:abc" }],
+      }),
+      downloadFile: jasmine.createSpy("download"),
+    };
+    await expectAsync(
+      server.installServer({ storagePath: __dirname, api, platform: "darwin", arch: "arm64" }),
+    ).toBeRejectedWithError(/No clangd release is available for darwin\/arm64/);
+    expect(api.downloadFile).not.toHaveBeenCalled();
   });
 
   it("refuses a release without a checksum before downloading", async () => {
@@ -146,8 +193,8 @@ describe("ide-clangd adapter", () => {
         assets: [
           {
             name: server.assetFor({
-              platform: process.platform,
-              arch: process.arch,
+              platform: "linux",
+              arch: "x64",
               version: "23.1.0",
             }),
             url: "https://example.test/clangd.zip",
@@ -156,9 +203,9 @@ describe("ide-clangd adapter", () => {
       }),
       downloadFile: jasmine.createSpy("download"),
     };
-    await expectAsync(server.installServer({ storagePath: __dirname, api })).toBeRejectedWithError(
-      /checksum/,
-    );
+    await expectAsync(
+      server.installServer({ storagePath: __dirname, api, platform: "linux", arch: "x64" }),
+    ).toBeRejectedWithError(/checksum/);
     expect(api.downloadFile).not.toHaveBeenCalled();
   });
 
