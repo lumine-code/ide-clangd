@@ -1,0 +1,171 @@
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+
+describe("ide-clangd adapter", () => {
+  let main, adapter, registration;
+  beforeEach(async () => {
+    main = (await lumine.packages.activatePackage("ide-clangd")).mainModule;
+    registration = { dispose: jasmine.createSpy("dispose") };
+    main.consumeIdeClient({
+      registerAdapter(value) {
+        adapter = value;
+        return registration;
+      },
+      reportMissingServer() {},
+    });
+  });
+  afterEach(async () => {
+    registration.dispose();
+    await lumine.packages.deactivatePackage("ide-clangd");
+  });
+
+  it("registers all four supported grammars and releases its service edge", () => {
+    expect(adapter.grammarScopes).toEqual([
+      "source.c",
+      "source.cpp",
+      "source.objc",
+      "source.objcpp",
+    ]);
+    expect(adapter.languageIdForScope("source.cpp")).toBe("cpp");
+    expect(adapter.languageIdForScope("source.objcpp")).toBe("objective-cpp");
+    expect(main.consumeIdeClient({ registerAdapter: () => registration })).toBe(registration);
+  });
+
+  it("passes compiler flags and resolves the compilation database against the project", async () => {
+    lumine.config.set("ide-clangd.serverPath", process.execPath);
+    lumine.config.set("ide-clangd.arguments", ["--background-index", "--log=error"]);
+    lumine.config.set("ide-clangd.compileCommandsPath", "build debug");
+    lumine.config.set("ide-clangd.fallbackFlags", ["-std=c++20", "-Iinclude"]);
+    const launch = await adapter.resolveServer({ rootPath: __dirname });
+    expect(launch.command).toBe(process.execPath);
+    expect(launch.cwd).toBe(__dirname);
+    expect(launch.args).toEqual([
+      "--background-index",
+      "--log=error",
+      `--compile-commands-dir=${path.join(__dirname, "build debug")}`,
+    ]);
+    expect(adapter.getInitializationOptions().fallbackFlags).toEqual(["-std=c++20", "-Iinclude"]);
+  });
+
+  it("does not mutate the configured argument list", async () => {
+    lumine.config.set("ide-clangd.serverPath", process.execPath);
+    lumine.config.set("ide-clangd.compileCommandsPath", "build");
+    await adapter.resolveServer({ rootPath: __dirname });
+    await adapter.resolveServer({ rootPath: __dirname });
+    expect(lumine.config.get("ide-clangd.arguments")).toEqual([
+      "--background-index",
+      "--clang-tidy",
+    ]);
+  });
+
+  it("keeps managed and PATH precedence while surfacing a broken explicit path", async () => {
+    const server = require("../lib/server");
+    const managed = { binaryPath: "/managed/clangd", version: "23.1.0" };
+    expect((await server.resolveServer("", managed)).command).toBe(managed.binaryPath);
+    expect((await server.resolveServer(process.execPath, managed)).command).toBe(process.execPath);
+    await expectAsync(
+      server.resolveServer(path.join(__dirname, "absent-executable"), managed),
+    ).toBeRejected();
+  });
+
+  it("reports a missing server through the hub", async () => {
+    const server = require("../lib/server");
+    spyOn(server, "findOnPath").and.returnValue(null);
+    const reportMissingServer = jasmine.createSpy("missing");
+    main.consumeIdeClient({
+      registerAdapter(value) {
+        adapter = value;
+        return registration;
+      },
+      reportMissingServer,
+    });
+    expect(await adapter.resolveServer({ rootPath: __dirname })).toBeNull();
+    const [id, options] = reportMissingServer.calls.mostRecent().args;
+    expect(id).toBe("ide-clangd");
+    expect(typeof options.description).toBe("string");
+  });
+
+  it("finds a native executable on a synthetic PATH", () => {
+    const server = require("../lib/server");
+    const name = path.basename(process.execPath, path.extname(process.execPath));
+    expect(
+      server.findOnPath(name, { PATH: path.dirname(process.execPath), PATHEXT: ".EXE" }),
+    ).toBeTruthy();
+    expect(
+      server.findOnPath("missing-clangd", { PATH: path.dirname(process.execPath) }),
+    ).toBeNull();
+  });
+
+  it("installs the verified archive with its complete builtin-header directory", async () => {
+    const server = require("../lib/server");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "ide-clangd-install-"));
+    try {
+      const binary = path.join(
+        root,
+        "clangd_23.1.0",
+        "bin",
+        process.platform === "win32" ? "clangd.exe" : "clangd",
+      );
+      const header = path.join(root, "clangd_23.1.0", "lib", "clang", "23", "include", "stddef.h");
+      const asset = {
+        name: server.assetFor({ platform: process.platform, arch: "x64", version: "23.1.0" }),
+        url: "https://example.test/clangd.zip",
+        digest: "sha256:abc",
+      };
+      const api = {
+        setServerInstallationStatus: jasmine.createSpy("status"),
+        latestGithubRelease: async () => ({ version: "23.1.0", assets: [asset] }),
+        downloadFile: jasmine.createSpy("download").and.callFake(async () => {
+          fs.mkdirSync(path.dirname(binary), { recursive: true });
+          fs.writeFileSync(binary, "binary");
+          fs.mkdirSync(path.dirname(header), { recursive: true });
+          fs.writeFileSync(header, "header");
+        }),
+        makeFileExecutable: jasmine.createSpy("executable").and.resolveTo(),
+      };
+      const result = await server.installServer({ storagePath: root, api });
+      expect(result.binary).toBe(path.relative(root, binary));
+      expect(fs.existsSync(header)).toBe(true);
+      expect(api.downloadFile).toHaveBeenCalledWith(asset.url, root, {
+        type: "zip",
+        digest: asset.digest,
+      });
+    } finally {
+      if (root.startsWith(path.join(os.tmpdir(), "ide-clangd-install-")))
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a release without a checksum before downloading", async () => {
+    const server = require("../lib/server");
+    const api = {
+      setServerInstallationStatus() {},
+      latestGithubRelease: async () => ({
+        version: "23.1.0",
+        assets: [
+          {
+            name: server.assetFor({
+              platform: process.platform,
+              arch: process.arch,
+              version: "23.1.0",
+            }),
+            url: "https://example.test/clangd.zip",
+          },
+        ],
+      }),
+      downloadFile: jasmine.createSpy("download"),
+    };
+    await expectAsync(server.installServer({ storagePath: __dirname, api })).toBeRejectedWithError(
+      /checksum/,
+    );
+    expect(api.downloadFile).not.toHaveBeenCalled();
+  });
+
+  it("exposes every verified feature without unsupported code lenses", () => {
+    const manifest = require("../package.json");
+    expect(manifest.configSchema.features.properties.codeLens).toBeUndefined();
+    expect(manifest.configSchema.features.properties.typeHierarchy).toBeDefined();
+    expect(main.provideBackgroundTips().packageName).toBe(manifest.name);
+  });
+});

@@ -1,0 +1,203 @@
+{
+  "name": "ide-clangd",
+  "author": "lumine-code",
+  "description": "Provide C and C++ language intelligence through clangd.",
+  "repository": "https://github.com/lumine-code/ide-clangd",
+  "bugs": {
+    "url": "https://github.com/lumine-code/ide-clangd/issues"
+  },
+  "keywords": [
+    "c++",
+    "objective-c",
+    "llvm",
+    "language-server",
+    "lsp",
+    "clang-tidy"
+  ],
+  "version": "1.0.0",
+  "license": "MIT",
+  "engines": {
+    "lumine": "^1.0.0"
+  },
+  "main": "./lib/main",
+  "files": [
+    "lib",
+    "spec"
+  ],
+  "scripts": {
+    "test": "lumine --test spec",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "consumedServices": {
+    "ide-client": {
+      "versions": {
+        "^1.0.0": "consumeIdeClient"
+      }
+    }
+  },
+  "providedServices": {
+    "background-tips.provider": {
+      "versions": {
+        "1.0.0": "provideBackgroundTips"
+      }
+    }
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.12.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-n": "^18.4.0",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.9",
+    "vscode-jsonrpc": "^9.0.3"
+  },
+  "configSchema": {
+    "serverPath": {
+      "title": "Server Path",
+      "description": "Absolute path to the language-server executable. Leave empty to use the managed copy or PATH.",
+      "type": "string",
+      "default": ""
+    },
+    "notifyWhenMissing": {
+      "title": "Notify When Missing",
+      "description": "Show a notification when the server or its runtime is missing.",
+      "type": "boolean",
+      "default": true
+    },
+    "features": {
+      "title": "Features",
+      "description": "Choose which language-server features the editor uses.",
+      "type": "object",
+      "scopeResolution": "grammar",
+      "properties": {
+        "diagnostics": {
+          "title": "Diagnostics",
+          "description": "Report problems in the linter.",
+          "type": "boolean",
+          "scopeResolution": "grammar",
+          "default": true
+        },
+        "autocomplete": {
+          "title": "Autocomplete",
+          "description": "Offer completions while typing.",
+          "type": "boolean",
+          "scopeResolution": "grammar",
+          "default": true
+        },
+        "hover": {
+          "title": "Hover",
+          "description": "Show documentation and type information on hover.",
+          "type": "boolean",
+          "scopeResolution": "grammar",
+          "default": true
+        },
+        "signature": {
+          "title": "Signature Help",
+          "description": "Show function parameters while entering a call.",
+          "type": "boolean",
+          "scopeResolution": "grammar",
+          "default": true
+        },
+        "definition": {
+          "title": "Go To Definition",
+          "description": "Navigate to declarations, definitions and implementations.",
+          "type": "boolean",
+          "scopeResolution": "grammar",
+          "default": true
+        },
+        "references": {
+          "title": "Find References",
+          "description": "Find the uses of a symbol.",
+          "type": "boolean",
+          "scopeResolution": "grammar",
+          "default": true
+        },
+        "callHierarchy": {
+          "title": "Call Hierarchy",
+          "description": "Inspect incoming and outgoing function calls.",
+          "type": "boolean",
+          "scopeResolution": "grammar",
+          "default": true
+        },
+        "typeHierarchy": {
+          "title": "Type Hierarchy",
+          "description": "Inspect the relationships between types.",
+          "type": "boolean",
+          "scopeResolution": "grammar",
+          "default": true
+        },
+        "symbols": {
+          "title": "Symbols",
+          "description": "Provide document and project symbols for navigation.",
+          "type": "boolean",
+          "scopeResolution": "grammar",
+          "default": true
+        },
+        "format": {
+          "title": "Format",
+          "description": "Format documents and selected ranges.",
+          "type": "boolean",
+          "scopeResolution": "grammar",
+          "default": true
+        },
+        "rename": {
+          "title": "Rename",
+          "description": "Rename symbols and update their references.",
+          "type": "boolean",
+          "scopeResolution": "grammar",
+          "default": true
+        },
+        "codeActions": {
+          "title": "Code Actions",
+          "description": "Offer fixes and refactorings for the current code.",
+          "type": "boolean",
+          "scopeResolution": "grammar",
+          "default": true
+        },
+        "inlayHints": {
+          "title": "Inlay Hints",
+          "description": "Show parameter names and inferred types beside source code.",
+          "type": "boolean",
+          "scopeResolution": "grammar",
+          "default": true
+        },
+        "semanticTokens": {
+          "title": "Semantic Tokens",
+          "description": "Highlight source code using the server's semantic information.",
+          "type": "boolean",
+          "scopeResolution": "grammar",
+          "default": true
+        }
+      }
+    },
+    "arguments": {
+      "title": "Server Arguments",
+      "description": "Arguments passed to clangd. Changes restart its project sessions.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [
+        "--background-index",
+        "--clang-tidy"
+      ]
+    },
+    "compileCommandsPath": {
+      "title": "Compile Commands Path",
+      "description": "Directory containing compile_commands.json, relative to the project root or absolute. Leave empty for clangd discovery.",
+      "type": "string",
+      "default": ""
+    },
+    "fallbackFlags": {
+      "title": "Fallback Flags",
+      "description": "Compiler arguments for files without a compilation database entry, such as include paths and the language standard.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    }
+  }
+}

@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Checks on ${{ matrix.os }} (Node 24)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm audit --audit-level=moderate
+      - run: npm pack --dry-run
+
+  integration:
+    name: Lumine integration with clangd 23.1.0
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      LUMINE_JASMINE_REPORTER: list
+      CLANGD_VERSION: 23.1.0
+      CLANGD_SHA256: e53b1a96196095faedb7642cf64964f7fb9ad4a0c1f00dd2c172a3d9dcbafdfd
+      REQUIRE_CLANGD: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: ide-clangd
+      - uses: actions/checkout@v7
+        with:
+          repository: lumine-code/lumine
+          path: lumine
+      - uses: actions/checkout@v7
+        with:
+          repository: lumine-code/ide-client
+          path: ide-client
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: lumine/.nvmrc
+          cache: npm
+          cache-dependency-path: lumine/package-lock.json
+      - name: Install build and display dependencies
+        run: |
+          sudo apt-get update || true
+          sudo apt-get install -y xvfb libx11-dev libxkbfile-dev libsecret-1-dev
+      - name: Use HTTPS for public GitHub dependencies
+        run: git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+      - name: Install the verified clangd release
+        working-directory: ide-clangd
+        run: |
+          asset="clangd-linux-${CLANGD_VERSION}.zip"
+          curl -fsSLO "https://github.com/clangd/clangd/releases/download/${CLANGD_VERSION}/${asset}"
+          echo "${CLANGD_SHA256}  ${asset}" | sha256sum --check -
+          mkdir .server
+          unzip -q "$asset" -d .server
+          echo "CLANGD_PATH=$PWD/.server/clangd_${CLANGD_VERSION}/bin/clangd" >> "$GITHUB_ENV"
+      - name: Install adapter and client dependencies
+        run: |
+          npm ci --ignore-scripts --prefix ide-clangd
+          npm ci --ignore-scripts --prefix ide-client
+      - name: Install editor dependencies
+        working-directory: lumine
+        run: |
+          install() { npm ci --ignore-scripts; }
+          install || install || install
+      - name: Prepare Electron
+        working-directory: lumine
+        run: |
+          node node_modules/electron/install.js
+          npm run build
+      - name: Prepare the test service packages
+        run: |
+          mkdir -p "$RUNNER_TEMP/ide-clangd-home/packages"
+          ln -s "$GITHUB_WORKSPACE/ide-client" "$RUNNER_TEMP/ide-clangd-home/packages/ide-client"
+          ln -s "$GITHUB_WORKSPACE/lumine/node_modules/language-c" "$RUNNER_TEMP/ide-clangd-home/packages/language-c"
+          echo "LUMINE_HOME=$RUNNER_TEMP/ide-clangd-home" >> "$GITHUB_ENV"
+          echo "LUMINE_TEST_PACKAGES=ide-client language-c" >> "$GITHUB_ENV"
+      - name: Run the Jasmine suite
+        working-directory: lumine
+        timeout-minutes: 20
+        run: xvfb-run --auto-servernum npm start -- --test ../ide-clangd/spec
