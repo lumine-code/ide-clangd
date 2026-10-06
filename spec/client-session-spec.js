@@ -180,8 +180,8 @@ liveSuite("ide-clangd through the real ide-client service", () => {
     configure("features.hover", false);
     configure("features.format", false);
     expect(await service.activeSessionForFeature(editor, "textDocument/hover", "hover")).toBeNull();
-    expect(await clientMain.provideCodeFormatFile().formatEntireFile(editor)).toEqual([]);
-    expect(await clientMain.provideCodeFormatOnSave().formatOnSave(editor)).toEqual([]);
+    expect(await clientMain.provideCodeFormatFile().formatEntireFile(editor)).toBeNull();
+    expect(await clientMain.provideCodeFormatOnSave().formatOnSave(editor)).toBeNull();
 
     configure("features.hover", true, { scopeSelector: ".source.cpp" });
     configure("features.format", true, { scopeSelector: ".source.cpp" });
