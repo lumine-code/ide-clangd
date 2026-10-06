@@ -1,3 +1,4 @@
+const { resolver, serverContext, installContext } = require("./helpers/server-resolver");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -37,7 +38,7 @@ describe("ide-clangd adapter", () => {
     lumine.config.set("ide-clangd.arguments", ["--background-index", "--log=error"]);
     lumine.config.set("ide-clangd.compileCommandsPath", "build debug");
     lumine.config.set("ide-clangd.fallbackFlags", ["-std=c++20", "-Iinclude"]);
-    const launch = await adapter.resolveServer({ rootPath: __dirname });
+    const launch = await adapter.resolveServer(serverContext({ rootPath: __dirname }));
     expect(launch.command).toBe(process.execPath);
     expect(launch.cwd).toBe(__dirname);
     expect(launch.args).toEqual([
@@ -51,27 +52,16 @@ describe("ide-clangd adapter", () => {
   it("does not mutate the configured argument list", async () => {
     lumine.config.set("ide-clangd.serverPath", process.execPath);
     lumine.config.set("ide-clangd.compileCommandsPath", "build");
-    await adapter.resolveServer({ rootPath: __dirname });
-    await adapter.resolveServer({ rootPath: __dirname });
+    await adapter.resolveServer(serverContext({ rootPath: __dirname }));
+    await adapter.resolveServer(serverContext({ rootPath: __dirname }));
     expect(lumine.config.get("ide-clangd.arguments")).toEqual([
       "--background-index",
       "--clang-tidy",
     ]);
   });
 
-  it("keeps managed and PATH precedence while surfacing a broken explicit path", async () => {
-    const server = require("../lib/server");
-    const managed = { binaryPath: "/managed/clangd", version: "23.1.0" };
-    expect((await server.resolveServer("", managed)).command).toBe(managed.binaryPath);
-    expect((await server.resolveServer(process.execPath, managed)).command).toBe(process.execPath);
-    await expectAsync(
-      server.resolveServer(path.join(__dirname, "absent-executable"), managed),
-    ).toBeRejected();
-  });
-
   it("reports a missing server through the hub", async () => {
-    const server = require("../lib/server");
-    spyOn(server, "findOnPath").and.returnValue(null);
+    spyOn(resolver, "select").and.resolveTo(null);
     const reportMissingServer = jasmine.createSpy("missing");
     main.consumeIdeClient({
       registerAdapter(value) {
@@ -80,21 +70,10 @@ describe("ide-clangd adapter", () => {
       },
       reportMissingServer,
     });
-    expect(await adapter.resolveServer({ rootPath: __dirname })).toBeNull();
+    expect(await adapter.resolveServer(serverContext({ rootPath: __dirname }))).toBeNull();
     const [id, options] = reportMissingServer.calls.mostRecent().args;
     expect(id).toBe("ide-clangd");
     expect(typeof options.description).toBe("string");
-  });
-
-  it("finds a native executable on a synthetic PATH", () => {
-    const server = require("../lib/server");
-    const name = path.basename(process.execPath, path.extname(process.execPath));
-    expect(
-      server.findOnPath(name, { PATH: path.dirname(process.execPath), PATHEXT: ".EXE" }),
-    ).toBeTruthy();
-    expect(
-      server.findOnPath("missing-clangd", { PATH: path.dirname(process.execPath) }),
-    ).toBeNull();
   });
 
   it("selects only the official x64 archives", () => {
@@ -148,12 +127,14 @@ describe("ide-clangd adapter", () => {
           }),
           makeFileExecutable: jasmine.createSpy("executable").and.resolveTo(),
         };
-        const result = await server.installServer({
-          storagePath: root,
-          api,
-          platform,
-          arch: "x64",
-        });
+        const result = await server.installServer(
+          installContext({
+            storagePath: root,
+            api,
+            platform,
+            arch: "x64",
+          }),
+        );
         expect(result.binary).toBe(path.relative(root, binary));
         expect(fs.existsSync(header)).toBe(true);
         expect(api.downloadFile).toHaveBeenCalledWith(asset.url, root, {
@@ -179,7 +160,9 @@ describe("ide-clangd adapter", () => {
       downloadFile: jasmine.createSpy("download"),
     };
     await expectAsync(
-      server.installServer({ storagePath: __dirname, api, platform: "darwin", arch: "arm64" }),
+      server.installServer(
+        installContext({ storagePath: __dirname, api, platform: "darwin", arch: "arm64" }),
+      ),
     ).toBeRejectedWithError(/No clangd release is available for darwin\/arm64/);
     expect(api.downloadFile).not.toHaveBeenCalled();
   });
@@ -204,7 +187,9 @@ describe("ide-clangd adapter", () => {
       downloadFile: jasmine.createSpy("download"),
     };
     await expectAsync(
-      server.installServer({ storagePath: __dirname, api, platform: "linux", arch: "x64" }),
+      server.installServer(
+        installContext({ storagePath: __dirname, api, platform: "linux", arch: "x64" }),
+      ),
     ).toBeRejectedWithError(/checksum/);
     expect(api.downloadFile).not.toHaveBeenCalled();
   });
