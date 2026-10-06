@@ -8,7 +8,7 @@ describe("ide-clangd adapter", () => {
   beforeEach(async () => {
     main = (await lumine.packages.activatePackage("ide-clangd")).mainModule;
     registration = { dispose: jasmine.createSpy("dispose") };
-    main.consumeIdeClient({
+    main.consumeIde({
       registerAdapter(value) {
         adapter = value;
         return registration;
@@ -30,7 +30,7 @@ describe("ide-clangd adapter", () => {
     ]);
     expect(adapter.languageIdForScope("source.cpp")).toBe("cpp");
     expect(adapter.languageIdForScope("source.objcpp")).toBe("objective-cpp");
-    expect(main.consumeIdeClient({ registerAdapter: () => registration })).toBe(registration);
+    expect(main.consumeIde({ registerAdapter: () => registration })).toBe(registration);
   });
 
   it("passes compiler flags and resolves the compilation database against the project", async () => {
@@ -63,7 +63,7 @@ describe("ide-clangd adapter", () => {
   it("reports a missing server through the hub", async () => {
     spyOn(resolver, "select").and.resolveTo(null);
     const reportMissingServer = jasmine.createSpy("missing");
-    main.consumeIdeClient({
+    main.consumeIde({
       registerAdapter(value) {
         adapter = value;
         return registration;

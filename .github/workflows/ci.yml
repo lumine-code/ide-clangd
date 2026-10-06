@@ -53,8 +53,8 @@ jobs:
           path: lumine
       - uses: actions/checkout@v7
         with:
-          repository: lumine-code/ide-client
-          path: ide-client
+          repository: lumine-code/ide
+          path: ide
       - uses: actions/setup-node@v7
         with:
           node-version-file: lumine/.nvmrc
@@ -78,7 +78,7 @@ jobs:
       - name: Install adapter and client dependencies
         run: |
           npm ci --ignore-scripts --prefix ide-clangd
-          npm ci --ignore-scripts --prefix ide-client
+          npm ci --ignore-scripts --prefix ide
       - name: Install declared spec packages
         run: node lumine/script/install-spec-packages.js --package ide-clangd --home "$RUNNER_TEMP/lumine-spec-home" --github-env "$GITHUB_ENV"
       - name: Install editor dependencies
@@ -94,10 +94,10 @@ jobs:
       - name: Prepare the test service packages
         run: |
           mkdir -p "$RUNNER_TEMP/ide-clangd-home/packages"
-          ln -s "$GITHUB_WORKSPACE/ide-client" "$RUNNER_TEMP/ide-clangd-home/packages/ide-client"
+          ln -s "$GITHUB_WORKSPACE/ide" "$RUNNER_TEMP/ide-clangd-home/packages/ide"
           ln -s "$GITHUB_WORKSPACE/lumine/node_modules/language-c" "$RUNNER_TEMP/ide-clangd-home/packages/language-c"
           echo "LUMINE_HOME=$RUNNER_TEMP/ide-clangd-home" >> "$GITHUB_ENV"
-          echo "LUMINE_TEST_PACKAGES=ide-client language-c" >> "$GITHUB_ENV"
+          echo "LUMINE_TEST_PACKAGES=ide language-c" >> "$GITHUB_ENV"
       - name: Run the Jasmine suite
         working-directory: lumine
         timeout-minutes: 20

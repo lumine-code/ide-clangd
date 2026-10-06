@@ -49,7 +49,7 @@ liveSuite("ide-clangd official server", () => {
       "--clang-tidy",
       "--log=error",
     ]);
-    main.consumeIdeClient({
+    main.consumeIde({
       registerAdapter(value) {
         adapter = value;
         return { dispose() {} };

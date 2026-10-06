@@ -2,7 +2,7 @@
 
 Provide C and C++ language intelligence through clangd.
 
-Registers [clangd](https://clangd.llvm.org/) with `ide-client` for C, C++, Objective-C and Objective-C++.
+Registers [clangd](https://clangd.llvm.org/) with `ide` for C, C++, Objective-C and Objective-C++.
 
 ## Features
 
@@ -19,7 +19,7 @@ Registers [clangd](https://clangd.llvm.org/) with `ide-client` for C, C++, Objec
 
 To install `ide-clangd` search for it in the Install pane of the Lumine settings, or run the command `lumine --install lumine-code/ide-clangd`.
 
-Install `ide-client` and `language-c`; Objective-C files also need `language-objective-c`. Install the frontends you want, such as `autocomplete`, `linter`, `hover`, `hyperclick`, `refactor` and `code-format`. Select an existing clangd executable or install one through `ide-client:manage-servers`.
+Install `ide` and `language-c`; Objective-C files also need `language-objective-c`. Install the frontends you want, such as `autocomplete`, `linter`, `hover`, `hyperclick`, `refactor` and `code-format`. Select an existing clangd executable or install one through `ide:manage-servers`.
 
 ## Usage
 
@@ -29,7 +29,7 @@ Managed releases are available for x64 Windows, macOS and Linux. On other archit
 
 ## Services
 
-- `ide-client`: consumed to register clangd with the editor's language-server client.
+- `ide`: consumed to register clangd with the editor's language-server client.
 - `background-tips.provider`: provided to explain compilation database setup.
 
 ## Contributing

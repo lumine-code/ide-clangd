@@ -29,7 +29,7 @@ const applyFormatEdits = (editor, edits) => {
   });
 };
 
-liveSuite("ide-clangd through the real ide-client service", () => {
+liveSuite("ide-clangd through the real ide service", () => {
   let root, file, uri, editor, clientMain, service, registration, originalPaths, session;
   const changed = new Set();
   const scoped = new Set();
@@ -65,9 +65,9 @@ liveSuite("ide-clangd through the real ide-client service", () => {
     fs.writeFileSync(file, source);
     uri = pathToFileURL(file).href;
     originalPaths = lumine.project.getPaths();
-    const clientPackage = await lumine.packages.activatePackage("ide-client");
+    const clientPackage = await lumine.packages.activatePackage("ide");
     clientMain = clientPackage.mainModule;
-    service = clientMain.provideIdeClient();
+    service = clientMain.provideIde();
     const clangPackage = await lumine.packages.activatePackage("ide-clangd");
     configure("serverPath", executable);
     configure("arguments", ["--background-index", "--log=error"]);
@@ -76,7 +76,7 @@ liveSuite("ide-clangd through the real ide-client service", () => {
     // consumption hook. Remove any bootstrap edge before registering ours.
     const bootstrap = clientMain.manager.adapters.get("ide-clangd");
     if (bootstrap) await clientMain.manager.unregisterAdapter(bootstrap);
-    registration = clangPackage.mainModule.consumeIdeClient(service);
+    registration = clangPackage.mainModule.consumeIde(service);
 
     await lumine.packages.activatePackage("language-c");
     lumine.project.setPaths([root]);
@@ -104,7 +104,7 @@ liveSuite("ide-clangd through the real ide-client service", () => {
       if (root && item.getPath()?.startsWith(root)) item.destroy();
     if (originalPaths) lumine.project.setPaths(originalPaths);
     await lumine.packages.deactivatePackage("ide-clangd");
-    await lumine.packages.deactivatePackage("ide-client");
+    await lumine.packages.deactivatePackage("ide");
     if (root) {
       const prefix = path.join(fs.realpathSync.native(os.tmpdir()), "ide-clangd-client-");
       if (!root.startsWith(prefix)) throw new Error("Unexpected clangd fixture cleanup path.");
