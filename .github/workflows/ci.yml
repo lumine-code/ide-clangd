@@ -79,6 +79,8 @@ jobs:
         run: |
           npm ci --ignore-scripts --prefix ide-clangd
           npm ci --ignore-scripts --prefix ide-client
+      - name: Install declared spec packages
+        run: node lumine/script/install-spec-packages.js --package ide-clangd --home "$RUNNER_TEMP/lumine-spec-home" --github-env "$GITHUB_ENV"
       - name: Install editor dependencies
         working-directory: lumine
         run: |
