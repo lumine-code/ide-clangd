@@ -15,6 +15,8 @@ Registers [clangd](https://clangd.llvm.org/) with `ide` for C, C++, Objective-C 
 - **Managed install**: downloads checksum-verified official releases and retains their builtin headers.
 - **Project sessions**: starts one server per project root when a matching editor opens.
 
+![Clangd reports an incompatible initialization in C code.](.github/demo.png)
+
 ## Installation
 
 To install `ide-clangd` search for it in the Install pane of the Lumine settings, or run the command `lumine --install lumine-code/ide-clangd`.

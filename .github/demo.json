@@ -1,0 +1,16 @@
+{
+  "title": "ide-clangd",
+  "description": "Clangd reports an incompatible initialization in C code.",
+  "recordedOn": "2026-10-13",
+  "sourceRevision": "749e71834e518c65d57b6a0df42ea276c67a9390",
+  "mode": "normal",
+  "fontSettings": "default",
+  "images": [
+    {
+      "file": "demo.png",
+      "label": "Clangd reports an incompatible initialization in C code.",
+      "width": 1100,
+      "height": 490
+    }
+  ]
+}
