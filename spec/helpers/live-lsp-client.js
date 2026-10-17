@@ -16,7 +16,15 @@ const withTimeout = (promise, label, timeout = 10000) => {
   return Promise.race([
     promise,
     new Promise((_resolve, reject) => {
-      timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeout}ms`)), timeout);
+      timer = setTimeout(
+        () =>
+          reject(
+            new Error(
+              `${typeof label === "function" ? label() : label} timed out after ${timeout}ms`,
+            ),
+          ),
+        timeout,
+      );
     }),
   ]).finally(() => clearTimeout(timer));
 };
@@ -67,83 +75,89 @@ class LiveLspClient {
 
     const rootUri = pathToFileURL(this.rootPath).href;
     this.workspaceFolders = [{ uri: rootUri, name: path.basename(this.rootPath) }];
-    const result = await this.request("initialize", {
-      processId: process.pid,
-      clientInfo: { name: "Lumine adapter integration specs", version: "1.0.0" },
-      rootUri,
-      initializationOptions: await this.adapter.getInitializationOptions?.({
-        ...serverContext({ rootPath: this.rootPath }),
+    // Starting a cold native executable has a different budget from requests
+    // sent to an initialized server. Keep ordinary protocol requests at 10s.
+    const result = await this.request(
+      "initialize",
+      {
+        processId: process.pid,
+        clientInfo: { name: "Lumine adapter integration specs", version: "1.0.0" },
         rootUri,
-      }),
-      workspaceFolders: this.workspaceFolders,
-      capabilities: {
-        workspace: { applyEdit: true, configuration: true, workspaceFolders: true },
-        textDocument: {
-          synchronization: { dynamicRegistration: false, didSave: true },
-          publishDiagnostics: { relatedInformation: true, tagSupport: { valueSet: [1, 2] } },
-          completion: {
-            dynamicRegistration: true,
-            completionItem: {
-              snippetSupport: true,
-              documentationFormat: ["markdown", "plaintext"],
+        initializationOptions: await this.adapter.getInitializationOptions?.({
+          ...serverContext({ rootPath: this.rootPath }),
+          rootUri,
+        }),
+        workspaceFolders: this.workspaceFolders,
+        capabilities: {
+          workspace: { applyEdit: true, configuration: true, workspaceFolders: true },
+          textDocument: {
+            synchronization: { dynamicRegistration: false, didSave: true },
+            publishDiagnostics: { relatedInformation: true, tagSupport: { valueSet: [1, 2] } },
+            completion: {
+              dynamicRegistration: true,
+              completionItem: {
+                snippetSupport: true,
+                documentationFormat: ["markdown", "plaintext"],
+              },
             },
-          },
-          hover: { dynamicRegistration: true, contentFormat: ["markdown", "plaintext"] },
-          definition: { dynamicRegistration: true, linkSupport: true },
-          references: { dynamicRegistration: true },
-          documentSymbol: { dynamicRegistration: true, hierarchicalDocumentSymbolSupport: true },
-          formatting: { dynamicRegistration: true },
-          rename: { dynamicRegistration: true, prepareSupport: true },
-          inlayHint: { dynamicRegistration: true },
-          codeAction: {
-            codeActionLiteralSupport: {
-              codeActionKind: { valueSet: ["quickfix", "refactor", "source"] },
+            hover: { dynamicRegistration: true, contentFormat: ["markdown", "plaintext"] },
+            definition: { dynamicRegistration: true, linkSupport: true },
+            references: { dynamicRegistration: true },
+            documentSymbol: { dynamicRegistration: true, hierarchicalDocumentSymbolSupport: true },
+            formatting: { dynamicRegistration: true },
+            rename: { dynamicRegistration: true, prepareSupport: true },
+            inlayHint: { dynamicRegistration: true },
+            codeAction: {
+              codeActionLiteralSupport: {
+                codeActionKind: { valueSet: ["quickfix", "refactor", "source"] },
+              },
+              resolveSupport: { properties: ["edit"] },
             },
-            resolveSupport: { properties: ["edit"] },
+            semanticTokens: {
+              requests: { full: true, range: true },
+              tokenTypes: [
+                "namespace",
+                "type",
+                "class",
+                "struct",
+                "function",
+                "method",
+                "parameter",
+                "variable",
+                "property",
+                "enumMember",
+                "macro",
+                "keyword",
+                "comment",
+                "string",
+                "number",
+                "operator",
+              ],
+              tokenModifiers: [
+                "declaration",
+                "definition",
+                "readonly",
+                "static",
+                "deprecated",
+                "abstract",
+                "async",
+                "modification",
+                "documentation",
+                "defaultLibrary",
+              ],
+              formats: ["relative"],
+              overlappingTokenSupport: false,
+              multilineTokenSupport: false,
+            },
+            callHierarchy: { dynamicRegistration: false },
+            typeHierarchy: { dynamicRegistration: false },
           },
-          semanticTokens: {
-            requests: { full: true, range: true },
-            tokenTypes: [
-              "namespace",
-              "type",
-              "class",
-              "struct",
-              "function",
-              "method",
-              "parameter",
-              "variable",
-              "property",
-              "enumMember",
-              "macro",
-              "keyword",
-              "comment",
-              "string",
-              "number",
-              "operator",
-            ],
-            tokenModifiers: [
-              "declaration",
-              "definition",
-              "readonly",
-              "static",
-              "deprecated",
-              "abstract",
-              "async",
-              "modification",
-              "documentation",
-              "defaultLibrary",
-            ],
-            formats: ["relative"],
-            overlappingTokenSupport: false,
-            multilineTokenSupport: false,
-          },
-          callHierarchy: { dynamicRegistration: false },
-          typeHierarchy: { dynamicRegistration: false },
+          window: { workDoneProgress: true },
+          general: { positionEncodings: ["utf-16"] },
         },
-        window: { workDoneProgress: true },
-        general: { positionEncodings: ["utf-16"] },
       },
-    });
+      30000,
+    );
     this.connection.sendNotification("initialized", {});
     this.connection.sendNotification("workspace/didChangeConfiguration", {
       settings: (await this.adapter.getSettings?.(this.configurationContext())) ?? {},
@@ -154,7 +168,7 @@ class LiveLspClient {
   request(method, params, timeout) {
     return withTimeout(
       this.connection.sendRequest(method, params),
-      `${this.adapter.displayName} ${method}; stderr: ${this.stderr}`,
+      () => `${this.adapter.displayName} ${method}; stderr: ${this.stderr}`,
       timeout,
     );
   }

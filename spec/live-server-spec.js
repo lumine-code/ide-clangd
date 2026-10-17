@@ -34,7 +34,8 @@ liveSuite("ide-clangd official server", () => {
   let main, adapter, client, root, uri, text, originalTimeout;
   beforeAll(() => {
     originalTimeout = jasmine.DEFAULT_TIMEOUT_INTERVAL;
-    jasmine.DEFAULT_TIMEOUT_INTERVAL = 30000;
+    // Initialization may use 30s, followed by the first document parse.
+    jasmine.DEFAULT_TIMEOUT_INTERVAL = 45000;
   });
   afterAll(() => {
     jasmine.DEFAULT_TIMEOUT_INTERVAL = originalTimeout;
