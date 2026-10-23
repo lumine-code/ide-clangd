@@ -65,11 +65,8 @@ liveSuite("ide-clangd official server", () => {
     fs.writeFileSync(file, text);
     uri = fileUri(file);
     client.open(uri, "cpp", text);
-    await client.waitFor(
-      () =>
-        client.messages("textDocument/publishDiagnostics").some(({ params }) => params.uri === uri),
-      "initial diagnostics",
-    );
+    // Feature requests wait for their document state on the server. An empty
+    // diagnostic notification is not a readiness acknowledgement for them.
   });
   afterEach(async () => {
     await client?.stop();

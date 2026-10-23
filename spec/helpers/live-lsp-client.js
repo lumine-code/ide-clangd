@@ -92,7 +92,11 @@ class LiveLspClient {
           workspace: { applyEdit: true, configuration: true, workspaceFolders: true },
           textDocument: {
             synchronization: { dynamicRegistration: false, didSave: true },
-            publishDiagnostics: { relatedInformation: true, tagSupport: { valueSet: [1, 2] } },
+            publishDiagnostics: {
+              relatedInformation: true,
+              versionSupport: true,
+              tagSupport: { valueSet: [1, 2] },
+            },
             completion: {
               dynamicRegistration: true,
               completionItem: {
