@@ -64,9 +64,9 @@ liveSuite("ide-clangd official server", () => {
     const file = path.join(root, "main.cpp");
     fs.writeFileSync(file, text);
     uri = fileUri(file);
-    client.open(uri, "cpp", text);
-    // Feature requests wait for their document state on the server. An empty
-    // diagnostic notification is not a readiness acknowledgement for them.
+    // The initial AST belongs to the existing cold-start budget. Feature
+    // requests retain their separate 10s limit after a causal file-status ack.
+    await client.open(uri, "cpp", text);
   });
   afterEach(async () => {
     await client?.stop();

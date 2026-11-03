@@ -46,6 +46,7 @@ class LiveLspClient {
   }
 
   async start() {
+    this.startupDeadline = Date.now() + 30000;
     const launch = await this.adapter.resolveServer(serverContext({ rootPath: this.rootPath }));
     this.launch = launch;
     this.child = childProcess.spawn(launch.command, launch.args || [], {
@@ -83,10 +84,13 @@ class LiveLspClient {
         processId: process.pid,
         clientInfo: { name: "Lumine adapter integration specs", version: "1.0.0" },
         rootUri,
-        initializationOptions: await this.adapter.getInitializationOptions?.({
-          ...serverContext({ rootPath: this.rootPath }),
-          rootUri,
-        }),
+        initializationOptions: {
+          ...(await this.adapter.getInitializationOptions?.({
+            ...serverContext({ rootPath: this.rootPath }),
+            rootUri,
+          })),
+          clangdFileStatus: true,
+        },
         workspaceFolders: this.workspaceFolders,
         capabilities: {
           workspace: { applyEdit: true, configuration: true, workspaceFolders: true },
@@ -160,7 +164,7 @@ class LiveLspClient {
           general: { positionEncodings: ["utf-16"] },
         },
       },
-      30000,
+      Math.max(1, this.startupDeadline - Date.now()),
     );
     this.connection.sendNotification("initialized", {});
     this.connection.sendNotification("workspace/didChangeConfiguration", {
@@ -177,10 +181,37 @@ class LiveLspClient {
     );
   }
 
-  open(uri, languageId, text) {
-    this.connection.sendNotification("textDocument/didOpen", {
-      textDocument: { uri, languageId, version: 1, text },
-    });
+  async open(uri, languageId, text) {
+    const connection = this.connection;
+    const timeout = this.startupDeadline ? this.startupDeadline - Date.now() : 10000;
+    if (timeout <= 0) throw new Error("clangd startup timed out before opening its document.");
+    let subscription;
+    try {
+      await withTimeout(
+        new Promise((resolve, reject) => {
+          // clangd's file-status extension reports idle only when both its
+          // preamble and AST workers are idle. Subscribe before didOpen so an
+          // immediate response is causal and cannot be missed. Each test uses
+          // a fresh connection and a unique URI; diagnostics are not this ack.
+          // https://clangd.llvm.org/extensions#file-status
+          subscription = connection.onNotification("textDocument/clangd.fileStatus", (params) => {
+            if (this.connection !== connection)
+              reject(new Error("clangd connection changed while opening its document."));
+            else if (params.uri === uri && params.state === "idle") resolve(params);
+          });
+          Promise.resolve(
+            connection.sendNotification("textDocument/didOpen", {
+              textDocument: { uri, languageId, version: 1, text },
+            }),
+          ).catch(reject);
+        }),
+        () => `clangd initial document readiness; stderr: ${this.stderr}`,
+        timeout,
+      );
+      this.startupDeadline = null;
+    } finally {
+      subscription?.dispose();
+    }
   }
 
   change(uri, text, version = 2) {
